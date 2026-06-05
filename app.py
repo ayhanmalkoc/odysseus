@@ -774,6 +774,10 @@ async def serve_email(request: Request):
 async def serve_memory(request: Request):
     return await serve_index(request)
 
+@app.get("/agents")
+async def serve_agents(request: Request):
+    return await serve_index(request)
+
 @app.get("/gallery")
 async def serve_gallery(request: Request):
     return await serve_index(request)

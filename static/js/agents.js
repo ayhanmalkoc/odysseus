@@ -253,4 +253,5 @@ window.agentTeamModule = { openAgents };
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('rail-agents')?.addEventListener('click', openAgents);
   document.getElementById('sidebar-agents-btn')?.addEventListener('click', openAgents);
+  if (window.location.pathname === '/agents') openAgents();
 });
