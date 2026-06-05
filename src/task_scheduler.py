@@ -237,8 +237,10 @@ def _digest_windows(now):
 
 
 class TaskScheduler:
-    def __init__(self, session_manager):
+    def __init__(self, session_manager, preset_manager=None):
         self._session_manager = session_manager
+        self._preset_manager = preset_manager
+        self._last_team_run_metadata = None
         self._running = False
         self._task = None
         self._executing = set()  # task IDs currently running OR queued behind the semaphore
@@ -1298,6 +1300,7 @@ class TaskScheduler:
         # the run (tasks rarely pin a model, so this is the only record of
         # which model actually produced the output).
         self._last_run_model = model
+        self._last_team_run_metadata = None
 
         # Ensure a session exists for output
         session_id = task.session_id
@@ -1309,6 +1312,7 @@ class TaskScheduler:
                 endpoint_url=endpoint_url,
                 model=model,
                 owner=task.owner,
+                group_preset_id=getattr(task, "group_preset_id", None),
                 created_at=_utcnow(),
                 updated_at=_utcnow(),
             )
@@ -1320,6 +1324,33 @@ class TaskScheduler:
                     self._session_manager.sessions[session_id] = self._session_manager._db_to_session(sess)
                 except Exception:
                     pass
+        elif getattr(task, "group_preset_id", None):
+            try:
+                existing = db.query(DbSession).filter(DbSession.id == session_id).first()
+                if existing:
+                    existing.group_preset_id = task.group_preset_id
+                    existing.updated_at = _utcnow()
+                    db.commit()
+            except Exception:
+                db.rollback()
+
+        if getattr(task, "group_preset_id", None) and self._preset_manager:
+            from src.agent_team_runner import run_lead_routed_team
+            team_result = await run_lead_routed_team(
+                session_id=session_id,
+                user_message=task.prompt or f"[Task] {task.name}",
+                base_messages=[{"role": "user", "content": task.prompt or f"[Task] {task.name}"}],
+                endpoint_url=endpoint_url,
+                model=model,
+                headers=None,
+                temperature=0.7,
+                max_tokens=0,
+                owner=task.owner,
+                preset_manager=self._preset_manager,
+            )
+            if team_result:
+                self._last_team_run_metadata = team_result.metadata
+                return team_result.response
 
         # For assistant check-ins: call each tool directly and post results
         # as separate messages. More reliable than hoping the model calls tools.
@@ -1457,6 +1488,7 @@ class TaskScheduler:
                 endpoint_url=endpoint_url or "",
                 model=model_name or "",
                 owner=task.owner,
+                group_preset_id=getattr(task, "group_preset_id", None),
                 created_at=_utcnow(),
                 updated_at=_utcnow(),
             )
@@ -1472,6 +1504,8 @@ class TaskScheduler:
         meta = {}
         if model_name:
             meta["model"] = model_name
+        if getattr(self, "_last_team_run_metadata", None):
+            meta.update(self._last_team_run_metadata or {})
         if crew and crew.is_default_assistant:
             meta.update({"source": "cron", "task_id": task.id, "task_name": task.name})
         msg_meta = json.dumps(meta)
@@ -1737,6 +1771,7 @@ class TaskScheduler:
                 endpoint_url=endpoint_url,
                 model=model,
                 owner=task.owner,
+                group_preset_id=getattr(task, "group_preset_id", None),
                 created_at=_utcnow(),
                 updated_at=_utcnow(),
             )

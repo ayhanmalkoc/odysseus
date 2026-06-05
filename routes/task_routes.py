@@ -149,6 +149,7 @@ class TaskCreate(BaseModel):
     endpoint_url: Optional[str] = None
     then_task_id: Optional[str] = None            # chain: run this task after success
     notifications_enabled: Optional[bool] = None  # None lets action-specific defaults apply
+    group_preset_id: Optional[str] = None          # agent-team target
 
 
 class TaskUpdate(BaseModel):
@@ -169,6 +170,7 @@ class TaskUpdate(BaseModel):
     endpoint_url: Optional[str] = None
     then_task_id: Optional[str] = None
     notifications_enabled: Optional[bool] = None
+    group_preset_id: Optional[str] = None
 
 
 def _display_task_name(t: ScheduledTask) -> str:
@@ -201,6 +203,7 @@ def _task_to_dict(t: ScheduledTask, include_last_run_result: bool = False) -> di
         "output_target": t.output_target,
         "session_id": t.session_id,
         "crew_member_id": getattr(t, "crew_member_id", None),
+        "group_preset_id": getattr(t, "group_preset_id", None),
         "model": t.model,
         "endpoint_url": t.endpoint_url,
         "run_count": t.run_count or 0,
@@ -528,6 +531,7 @@ def setup_task_routes(task_scheduler) -> APIRouter:
                 model=req.model or None,
                 endpoint_url=req.endpoint_url or None,
                 then_task_id=req.then_task_id or None,
+                group_preset_id=(req.group_preset_id or None),
                 webhook_token=webhook_token,
                 notifications_enabled=notifications_enabled,
             )
@@ -691,6 +695,8 @@ def setup_task_routes(task_scheduler) -> APIRouter:
                 task.then_task_id = req.then_task_id or None
             if req.notifications_enabled is not None:
                 task.notifications_enabled = bool(req.notifications_enabled)
+            if req.group_preset_id is not None:
+                task.group_preset_id = req.group_preset_id or None
             if req.cron_expression is not None:
                 if req.cron_expression:
                     try:

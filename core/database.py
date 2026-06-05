@@ -554,6 +554,7 @@ class ScheduledTask(TimestampMixin, Base):
     then_task_id   = Column(String, ForeignKey("scheduled_tasks.id", ondelete="SET NULL"), nullable=True)
     webhook_token  = Column(String, nullable=True, unique=True)
     crew_member_id = Column(String, nullable=True)     # optional link to crew_members.id
+    group_preset_id = Column(String, nullable=True)    # optional link to preset_manager group_presets id
     # character_id historically referenced an agent_characters table that was
     # never actually created. Keep the column for schema compatibility but
     # drop the ForeignKey so SQLAlchemy table sort doesn't fail on flush.

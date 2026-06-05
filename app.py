@@ -628,7 +628,7 @@ app.include_router(setup_editor_draft_routes())
 
 # Scheduled tasks + event bus
 from src.task_scheduler import TaskScheduler
-task_scheduler = TaskScheduler(session_manager)
+task_scheduler = TaskScheduler(session_manager, preset_manager=preset_manager)
 from src.event_bus import set_task_scheduler
 set_task_scheduler(task_scheduler)
 from routes.task_routes import setup_task_routes

@@ -532,7 +532,7 @@ function _categoryFor(task) {
   }
   // LLM tasks → Assistant if linked to a crew member, else Other
   if (task.task_type === 'llm' || !task.task_type) {
-    return task.crew_member_id ? 'Assistant' : 'Other';
+    return task.group_preset_id ? 'Team' : (task.crew_member_id ? 'Assistant' : 'Other');
   }
   return 'Other';
 }
@@ -1044,6 +1044,11 @@ function _showForm(existing, initTaskType, initTriggerType) {
         <option value="session">Session</option>
       </select>
 
+      <label class="task-form-label">Target</label>
+      <select id="task-form-team-target" class="task-form-input">
+        <option value="">Default / single agent</option>
+      </select>
+
       <label class="task-form-label">Model <span style="opacity:0.5;font-weight:normal;font-size:10px;">(optional — overrides session default)</span></label>
       <select id="task-form-model" class="task-form-input">
         <option value="">Use session default</option>
@@ -1315,6 +1320,31 @@ function _showForm(existing, initTaskType, initTriggerType) {
     }
   });
 
+
+  // Populate team target dropdown from group presets.
+  fetch(`${API_BASE}/api/presets/groups`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { groups: [] })
+    .then(data => {
+      const sel = document.getElementById('task-form-team-target');
+      if (!sel) return;
+      const cur = existing?.group_preset_id || '';
+      (data.groups || []).forEach(group => {
+        const opt = document.createElement('option');
+        opt.value = group.id || '';
+        opt.textContent = `Team: ${group.name || group.id}`;
+        if (cur && cur === opt.value) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      if (cur && sel.value !== cur) {
+        const opt = document.createElement('option');
+        opt.value = cur;
+        opt.textContent = `Team: ${cur} (missing)`;
+        opt.selected = true;
+        sel.appendChild(opt);
+      }
+    })
+    .catch(() => {});
+
   // Populate model dropdown from /api/models. Value is "endpoint_url::model"
   // so a single field encodes both the model name and which endpoint to call.
   // Blank value (option 0) = inherit session default.
@@ -1405,6 +1435,9 @@ function _showForm(existing, initTaskType, initTriggerType) {
       output_target: outputTarget,
     };
     if (nameEl) payload.name = nameEl.value.trim() || undefined;
+
+    const teamTarget = document.getElementById('task-form-team-target')?.value || '';
+    payload.group_preset_id = teamTarget;
 
     // Model / endpoint override. Blank = inherit session default. Otherwise
     // value is `endpoint_url::model_id`.
