@@ -570,6 +570,10 @@ app.include_router(setup_search_routes(config))
 from routes.preset_routes import setup_preset_routes
 app.include_router(setup_preset_routes(preset_manager))
 
+# Agents (CrewMember-backed agent profiles)
+from routes.agent_routes import setup_agent_routes
+app.include_router(setup_agent_routes())
+
 # Diagnostics
 from routes.diagnostics_routes import setup_diagnostics_routes
 app.include_router(setup_diagnostics_routes(rag_manager, rag_available, research_handler))
