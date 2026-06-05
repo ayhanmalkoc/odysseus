@@ -1573,7 +1573,8 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 
     const currentMetaEl = uiModule.el('current-meta');
     if (currentMetaEl) {
-      currentMetaEl.textContent = meta ? meta.name : 'Odysseus Chat';
+      const suffix = meta?.group_preset_id ? ' · Team' : (meta?.crew_member_id ? ' · Agent' : '');
+      currentMetaEl.textContent = (meta ? meta.name : 'Odysseus Chat') + suffix;
     }
     // Update model picker visibility
     updateModelPicker();
@@ -1810,7 +1811,8 @@ export function createDirectChat(url, modelId, endpointId) {
   // Update current-meta header
   const metaEl = document.getElementById('current-meta');
   if (metaEl) {
-    metaEl.textContent = 'New Chat';
+    const suffix = _pendingChat?.groupPresetId ? ' · Team' : (_pendingChat?.crewMemberId ? ' · Agent' : '');
+    metaEl.textContent = 'New Chat' + suffix;
   }
 
   // Enable input

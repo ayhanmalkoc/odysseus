@@ -134,6 +134,21 @@ function wireEvents(root) {
   root.querySelectorAll('[data-team-chat]').forEach((btn) => btn.addEventListener('click', () => startTeamChat(btn.dataset.teamChat)));
 }
 
+function renderMemberPickerRows(group) {
+  const selected = new Map((group.members || []).map((m) => [m.crew_member_id, m.role || 'worker']));
+  return agents.filter((a) => a.is_active && a.id !== group.lead_crew_member_id).map((agent) => {
+    const checked = selected.has(agent.id);
+    const role = selected.get(agent.id) || 'worker';
+    return `<label class="agent-team-member-row">
+      <input type="checkbox" value="${esc(agent.id)}" ${checked ? 'checked' : ''} />
+      <span>${esc(agent.name)}</span>
+      <select data-role-for="${esc(agent.id)}">
+        ${['worker', 'researcher', 'reviewer', 'writer', 'critic'].map((r) => `<option value="${r}"${role === r ? ' selected' : ''}>${r}</option>`).join('')}
+      </select>
+    </label>`;
+  }).join('') || '<div class="muted">Create agents first, then add them as members.</div>';
+}
+
 function editorShell(title, html, onSave) {
   const body = ensureModal().querySelector('#agents-body');
   body.innerHTML = `<button class="btn btn-small" id="agents-back">← Back</button><h3>${esc(title)}</h3>${html}`;
@@ -167,7 +182,6 @@ function openAgentEditor(id = '') {
 
 function openTeamEditor(id = '') {
   const group = groups.find((g) => g.id === id) || { topology: 'lead_routed', members: [], run_config: { max_steps: 8, parallel: false, show_activity: true } };
-  const membersText = (group.members || []).map((m) => `${m.crew_member_id}:${m.role || 'worker'}`).join('\n');
   editorShell(id ? 'Edit team' : 'New team', `
     <div style="display:grid;gap:10px;max-width:760px;">
       <label>Name <input id="team-name" value="${esc(group.name)}" /></label>
@@ -176,15 +190,16 @@ function openTeamEditor(id = '') {
       <label>Topology <select id="team-topology">
         ${['lead_routed', 'sequential_pipeline', 'broadcast_review'].map((t) => `<option value="${t}"${group.topology === t ? ' selected' : ''}>${t}</option>`).join('')}
       </select></label>
-      <label>Members <textarea id="team-members" rows="6" placeholder="crew-id:role">${esc(membersText)}</textarea></label>
+      <label>Members</label>
+      <div class="agent-team-member-picker">${renderMemberPickerRows(group)}</div>
       <label>Shared instructions <textarea id="team-instructions" rows="5">${esc(group.shared_instructions)}</textarea></label>
       <label>Max steps <input id="team-max-steps" type="number" min="1" max="64" value="${esc(group.run_config?.max_steps || 8)}" /></label>
       <button class="btn" data-save>Save team</button>
     </div>`, async () => {
-      const members = document.getElementById('team-members').value.split('\n').map((line, index) => {
-        const [crewId, role = 'worker'] = line.split(':').map((x) => x.trim());
-        return crewId ? { crew_member_id: crewId, role, order: index + 1, enabled: true } : null;
-      }).filter(Boolean);
+      const members = Array.from(document.querySelectorAll('.agent-team-member-picker input[type="checkbox"]:checked')).map((box, index) => {
+        const roleSel = document.querySelector(`[data-role-for="${CSS.escape(box.value)}"]`);
+        return { crew_member_id: box.value, role: roleSel?.value || 'worker', order: index + 1, enabled: true };
+      });
       const payload = {
         id: id || '',
         name: document.getElementById('team-name').value.trim(),
@@ -237,4 +252,5 @@ window.agentTeamModule = { openAgents };
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('rail-agents')?.addEventListener('click', openAgents);
+  document.getElementById('sidebar-agents-btn')?.addEventListener('click', openAgents);
 });

@@ -36192,3 +36192,23 @@ body.theme-frosted .modal {
   font-size: 12px;
   line-height: 1.35;
 }
+
+
+.agent-team-member-picker {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg) 12%);
+}
+.agent-team-member-row {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(120px, 160px);
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.agent-team-member-row select {
+  min-width: 0;
+}
