@@ -21,6 +21,7 @@ from src.model_context import estimate_tokens
 from src.chat_helpers import coerce_message_and_session
 from src.endpoint_resolver import normalize_base as _normalize_base, build_chat_url
 from src.prompt_security import untrusted_context_message
+from src.agent_team_runner import run_lead_routed_team
 from core.exceptions import SessionNotFoundError
 from src.auth_helpers import get_current_user
 from routes.session_routes import _verify_session_owner
@@ -335,16 +336,33 @@ def setup_chat_routes(
             except Exception as e:
                 logger.error(f"Research failed: {e}")
 
-        reply = await llm_call_async(
-            sess.endpoint_url,
-            sess.model,
-            ctx.messages,
+        team_result = await run_lead_routed_team(
+            session_id=session,
+            user_message=message,
+            base_messages=ctx.messages,
+            endpoint_url=sess.endpoint_url,
+            model=sess.model,
             headers=sess.headers,
             temperature=ctx.preset.temperature,
             max_tokens=ctx.preset.max_tokens,
-            prompt_type=preset_id,
+            owner=ctx.user,
+            preset_manager=chat_handler.preset_manager,
         )
-        _clean_reply, _clean_md = clean_thinking_for_save(reply, {"model": sess.model})
+        if team_result:
+            reply = team_result.response
+            response_metadata = {"model": sess.model, **team_result.metadata}
+        else:
+            reply = await llm_call_async(
+                sess.endpoint_url,
+                sess.model,
+                ctx.messages,
+                headers=sess.headers,
+                temperature=ctx.preset.temperature,
+                max_tokens=ctx.preset.max_tokens,
+                prompt_type=preset_id,
+            )
+            response_metadata = {"model": sess.model}
+        _clean_reply, _clean_md = clean_thinking_for_save(reply, response_metadata)
         sess.add_message(ChatMessage("assistant", _clean_reply, metadata=_clean_md))
 
         from core.database import update_session_last_accessed
@@ -658,6 +676,37 @@ def setup_chat_routes(
             # In chat mode compare, disable ALL agent tools (no bash, python, file ops)
             if chat_mode == 'chat':
                 disabled_tools.update({"bash", "python", "read_file", "write_file", "web_search", "web_fetch", "search_chats", "manage_tasks"})
+
+        team_result = await run_lead_routed_team(
+            session_id=session,
+            user_message=message,
+            base_messages=ctx.messages,
+            endpoint_url=sess.endpoint_url,
+            model=sess.model,
+            headers=sess.headers,
+            temperature=ctx.preset.temperature,
+            max_tokens=ctx.preset.max_tokens,
+            owner=ctx.user,
+            preset_manager=chat_handler.preset_manager,
+        )
+
+        if team_result:
+            async def stream_team_result() -> AsyncGenerator[str, None]:
+                metadata = {"model": sess.model, **team_result.metadata}
+                clean_reply, clean_md = clean_thinking_for_save(team_result.response, metadata)
+                sess.add_message(ChatMessage("assistant", clean_reply, metadata=clean_md))
+                if not incognito:
+                    session_manager.save_sessions()
+                run_post_response_tasks(
+                    sess, session_manager, session, message, team_result.response, None,
+                    ctx.uprefs, memory_manager, memory_vector, webhook_manager,
+                    character_name=ctx.preset.character_name,
+                    owner=ctx.user,
+                )
+                yield f"data: {json.dumps({'delta': team_result.response})}\n\n"
+                yield f"data: {json.dumps({'type': 'team_activity', 'data': team_result.metadata})}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(stream_team_result(), media_type="text/event-stream")
 
         async def stream_with_save() -> AsyncGenerator[str, None]:
             # _effective_mode is read-only here; closure captures it from
