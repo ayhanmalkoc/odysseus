@@ -324,6 +324,8 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
         skip_validation: str = Form(None),
         api_key: str = Form(""),
         endpoint_id: str = Form(""),
+        crew_member_id: str = Form(""),
+        group_preset_id: str = Form(""),
     ):
         skip_val = str(skip_validation).lower() == "true"
         user = get_current_user(request)
@@ -410,6 +412,18 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
             rag=str(rag).lower() == "true" if rag else False,
             owner=user,
         )
+        # Persist optional agent/team binding for single-agent and team chats.
+        if crew_member_id or group_preset_id:
+            db = SessionLocal()
+            try:
+                db_session = db.query(DbSession).filter(DbSession.id == sid).first()
+                if db_session:
+                    db_session.crew_member_id = crew_member_id.strip() or None
+                    db_session.group_preset_id = group_preset_id.strip() or None
+                    db_session.mode = "team" if group_preset_id.strip() else "agent"
+                    db.commit()
+            finally:
+                db.close()
         # Set auth headers for custom API-key endpoints
         resolved_key = request_api_key
         resolved_base = endpoint_url
@@ -433,7 +447,9 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
             name=session.name,
             model=model_to_use,
             rag=str(rag).lower() == "true" if rag else False,
-            archived=False
+            archived=False,
+            crew_member_id=crew_member_id.strip() or None,
+            group_preset_id=group_preset_id.strip() or None,
         )    
     @router.patch("/session/{sid}")
     def rename_session(
@@ -441,6 +457,8 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
         name: str = Form(None), folder: str = Form(None),
         model: str = Form(None), endpoint_url: str = Form(None),
         endpoint_id: str = Form(None),
+        crew_member_id: str = Form(None),
+        group_preset_id: str = Form(None),
     ):
         _verify_session_owner(request, sid)
         try:
@@ -461,6 +479,22 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
                     db_session.updated_at = datetime.utcnow()
                     db.commit()
                     result["folder"] = folder if folder else None
+            finally:
+                db.close()
+        if crew_member_id is not None or group_preset_id is not None:
+            db = SessionLocal()
+            try:
+                db_session = db.query(DbSession).filter(DbSession.id == sid).first()
+                if db_session:
+                    if crew_member_id is not None:
+                        db_session.crew_member_id = crew_member_id.strip() or None
+                        result["crew_member_id"] = db_session.crew_member_id
+                    if group_preset_id is not None:
+                        db_session.group_preset_id = group_preset_id.strip() or None
+                        result["group_preset_id"] = db_session.group_preset_id
+                    db_session.mode = "team" if db_session.group_preset_id else ("agent" if db_session.crew_member_id else db_session.mode)
+                    db_session.updated_at = datetime.utcnow()
+                    db.commit()
             finally:
                 db.close()
         # Switch model/endpoint mid-session

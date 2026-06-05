@@ -1759,7 +1759,7 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 }
 
 // Pending session — stored locally until the first message is sent
-let _pendingChat = null; // { url, modelId, endpointId }
+let _pendingChat = null; // { url, modelId, endpointId, crewMemberId, groupPresetId }
 
 export function createDirectChat(url, modelId, endpointId) {
   _sessionNavToken++;
@@ -1775,7 +1775,8 @@ export function createDirectChat(url, modelId, endpointId) {
   }
 
   // Don't hit the API — just store the model info and prepare the UI
-  _pendingChat = { url, modelId, endpointId };
+  _pendingChat = { url, modelId, endpointId, ...(window.__nextChatBinding || {}) };
+  window.__nextChatBinding = null;
   _skipAutoSelect = true;
   currentSessionId = null;
   Storage.remove('lastSessionId');
@@ -1837,6 +1838,12 @@ export async function materializePendingSession() {
   }
   if (pending.endpointId) {
     fd.append('endpoint_id', pending.endpointId);
+  }
+  if (pending.crewMemberId) {
+    fd.append('crew_member_id', pending.crewMemberId);
+  }
+  if (pending.groupPresetId) {
+    fd.append('group_preset_id', pending.groupPresetId);
   }
 
   let res;
@@ -1903,6 +1910,17 @@ export function getCurrentEndpointUrl() {
   if (sess && sess.endpoint_url) return sess.endpoint_url;
   if (_pendingChat && _pendingChat.url) return _pendingChat.url;
   return null;
+}
+
+export function setNextChatBinding(binding = {}) {
+  window.__nextChatBinding = {
+    crewMemberId: binding.crewMemberId || '',
+    groupPresetId: binding.groupPresetId || '',
+  };
+  if (_pendingChat) {
+    _pendingChat = { ..._pendingChat, ...window.__nextChatBinding };
+    window.__nextChatBinding = null;
+  }
 }
 
 export function setCurrentSessionId(id) {
@@ -3092,6 +3110,7 @@ const sessionModule = {
   getSessions,
   getCurrentModel,
   getCurrentEndpointUrl,
+  setNextChatBinding,
   setCurrentSessionId,
   initDragSort,
   updateModelPicker,
