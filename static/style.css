@@ -36212,3 +36212,47 @@ body.theme-frosted .modal {
 .agent-team-member-row select {
   min-width: 0;
 }
+
+.agent-team-launcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--red) 12%);
+}
+.agent-team-launcher select { min-width: 0; }
+.agent-team-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.agent-chat-target-pill {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: fit-content;
+  max-width: min(720px, calc(100vw - 48px));
+  margin: 0 0 8px 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 82%, var(--red) 18%);
+  font-size: 12px;
+}
+.agent-chat-target-pill button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+@media (max-width: 760px) {
+  .agent-team-launcher, .agent-team-grid { grid-template-columns: 1fr; }
+}

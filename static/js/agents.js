@@ -62,10 +62,36 @@ function agentOptions(selected = '') {
   )).join('');
 }
 
+function chatTargetOptions() {
+  const agentOpts = agents.filter((a) => a.is_active).map((a) => `<option value="agent:${esc(a.id)}">Agent · ${esc(a.name)}</option>`).join('');
+  const teamOpts = groups.map((g) => `<option value="team:${esc(g.id)}">Team · ${esc(g.name)}</option>`).join('');
+  return `<option value="normal:">Normal chat</option>${agentOpts ? '<optgroup label="Agents">' + agentOpts + '</optgroup>' : ''}${teamOpts ? '<optgroup label="Teams">' + teamOpts + '</optgroup>' : ''}`;
+}
+
+function showChatTarget(kind, name) {
+  const pill = document.getElementById('agent-chat-target-pill');
+  if (!pill) return;
+  if (!kind || kind === 'normal') { pill.style.display = 'none'; pill.innerHTML = ''; return; }
+  pill.style.display = 'flex';
+  pill.innerHTML = `<span>${esc(kind === 'team' ? 'Team' : 'Agent')}: <strong>${esc(name)}</strong></span><button type="button" id="agent-chat-target-clear" title="Clear target">×</button>`;
+  pill.querySelector('#agent-chat-target-clear')?.addEventListener('click', () => {
+    showChatTarget('', '');
+    window.sessionModule?.setNextChatBinding?.({});
+  });
+}
+
 function render() {
   const body = ensureModal().querySelector('#agents-body');
   body.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+    <section class="agent-team-launcher">
+      <div>
+        <strong>Start a focused chat</strong>
+        <div class="muted">Pick normal chat, one agent, or a team. The selection binds the next chat session.</div>
+      </div>
+      <select id="agent-team-chat-target">${chatTargetOptions()}</select>
+      <button class="btn" id="agent-team-start-chat">Start chat</button>
+    </section>
+    <div class="agent-team-grid">
       <section class="panel" style="padding:12px;border:1px solid var(--border);border-radius:10px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <h3 style="margin:0;">Agents</h3>
@@ -112,7 +138,7 @@ function renderTeams() {
           <strong>${esc(group.name)}</strong>
           <span class="muted">${esc(group.topology || 'lead_routed')}</span>
         </div>
-        <div class="muted" style="font-size:12px;">Lead: ${esc(lead ? lead.name : group.lead_crew_member_id)} · Members: ${(group.members || []).length}</div>
+        <div class="muted" style="font-size:12px;">Lead: ${esc(lead ? lead.name : (group.lead_crew_member_id || 'not set'))} · Members: ${(group.members || []).length} · ${esc(group.description || 'No description')}</div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
           <button class="btn btn-small" data-team-edit="${esc(group.id)}">Edit</button>
           <button class="btn btn-small" data-team-chat="${esc(group.id)}">Team chat</button>
@@ -123,6 +149,7 @@ function renderTeams() {
 }
 
 function wireEvents(root) {
+  root.querySelector('#agent-team-start-chat')?.addEventListener('click', () => startSelectedChat(root.querySelector('#agent-team-chat-target')?.value || 'normal:'));
   root.querySelector('#agent-create')?.addEventListener('click', () => openAgentEditor());
   root.querySelector('#team-create')?.addEventListener('click', () => openTeamEditor());
   root.querySelectorAll('[data-agent-edit]').forEach((btn) => btn.addEventListener('click', () => openAgentEditor(btn.dataset.agentEdit)));
@@ -220,16 +247,29 @@ async function cloneAgent(id) { await jsonFetch(`/api/agents/${id}/clone`, { met
 async function archiveAgent(id) { await jsonFetch(`/api/agents/${id}`, { method: 'DELETE' }); await refresh(); }
 async function deleteTeam(id) { await jsonFetch(`/api/presets/groups/${id}`, { method: 'DELETE' }); await refresh(); }
 
+function startSelectedChat(value) {
+  const [kind, id] = String(value || 'normal:').split(':');
+  if (kind === 'agent') return startAgentChat(id);
+  if (kind === 'team') return startTeamChat(id);
+  showChatTarget('', '');
+  window.sessionModule?.createDirectChat?.(window.sessionModule.getCurrentEndpointUrl?.() || '', window.sessionModule.getCurrentModel?.() || '', '');
+  closeAgents();
+}
+
 function startAgentChat(id) {
+  const agent = agents.find((a) => a.id === id);
   const sm = window.sessionModule;
-  sm?.setNextChatBinding?.({ crewMemberId: id });
+  sm?.setNextChatBinding?.({ crewMemberId: id, crewMemberName: agent?.name || id });
+  showChatTarget('agent', agent?.name || id);
   sm?.createDirectChat?.(sm.getCurrentEndpointUrl?.() || '', sm.getCurrentModel?.() || '', '');
   closeAgents();
 }
 
 function startTeamChat(id) {
+  const group = groups.find((g) => g.id === id);
   const sm = window.sessionModule;
-  sm?.setNextChatBinding?.({ groupPresetId: id });
+  sm?.setNextChatBinding?.({ groupPresetId: id, groupPresetName: group?.name || id });
+  showChatTarget('team', group?.name || id);
   sm?.createDirectChat?.(sm.getCurrentEndpointUrl?.() || '', sm.getCurrentModel?.() || '', '');
   closeAgents();
 }

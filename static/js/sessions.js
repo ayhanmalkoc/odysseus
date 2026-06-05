@@ -1760,7 +1760,7 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 }
 
 // Pending session — stored locally until the first message is sent
-let _pendingChat = null; // { url, modelId, endpointId, crewMemberId, groupPresetId }
+let _pendingChat = null; // { url, modelId, endpointId, crewMemberId, groupPresetId, crewMemberName, groupPresetName }
 
 export function createDirectChat(url, modelId, endpointId) {
   _sessionNavToken++;
@@ -1811,7 +1811,9 @@ export function createDirectChat(url, modelId, endpointId) {
   // Update current-meta header
   const metaEl = document.getElementById('current-meta');
   if (metaEl) {
-    const suffix = _pendingChat?.groupPresetId ? ' · Team' : (_pendingChat?.crewMemberId ? ' · Agent' : '');
+    const suffix = _pendingChat?.groupPresetId
+      ? ` · Team: ${_pendingChat.groupPresetName || _pendingChat.groupPresetId}`
+      : (_pendingChat?.crewMemberId ? ` · Agent: ${_pendingChat.crewMemberName || _pendingChat.crewMemberId}` : '');
     metaEl.textContent = 'New Chat' + suffix;
   }
 
@@ -1918,6 +1920,8 @@ export function setNextChatBinding(binding = {}) {
   window.__nextChatBinding = {
     crewMemberId: binding.crewMemberId || '',
     groupPresetId: binding.groupPresetId || '',
+    crewMemberName: binding.crewMemberName || '',
+    groupPresetName: binding.groupPresetName || '',
   };
   if (_pendingChat) {
     _pendingChat = { ..._pendingChat, ...window.__nextChatBinding };
