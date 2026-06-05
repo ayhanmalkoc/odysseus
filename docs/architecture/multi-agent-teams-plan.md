@@ -414,3 +414,132 @@ Start with Phase 1 and Phase 2 only: DB models, service layer, REST CRUD, tests.
 | Compatibility | Existing assistant/check-in/task behavior unchanged | Yes |
 | Automation | Scheduled/webhook team runs | No for V1, yes for automation release |
 | Polish | Templates, replay, dashboards | No for V1 |
+
+## Implemented On `feature/agent-teams`
+
+### Phase 1 — CrewMember Agent CRUD
+
+Implemented:
+
+- `/api/agents` list/create/get/update/archive endpoints.
+- `/api/agents/{agent_id}/clone` clone endpoint.
+- Existing `CrewMember` remains the agent profile storage layer.
+- Default assistant protection prevents accidental archive/delete.
+- Owner-scoped CRUD tests.
+
+Files:
+
+- `routes/agent_routes.py`
+- `tests/test_agent_routes.py`
+- `app.py`
+
+### Phase 2 — Group Preset Schema/API
+
+Implemented:
+
+- Existing `group_presets` became validated agent-team presets.
+- Supported topology values: `lead_routed`, `sequential_pipeline`, `broadcast_review`.
+- Legacy replace-all `{ groups: [...] }` endpoint remains supported.
+- Individual get/create/update/delete group preset endpoints added.
+
+Files:
+
+- `routes/preset_routes.py`
+- `tests/test_group_preset_routes.py`
+
+### Phase 3 — Agents + Team Builder UI
+
+Implemented:
+
+- New rail entry: Agents & Teams.
+- Agent list/create/edit/archive/clone UI.
+- Team list/create/edit/delete UI.
+- Team chat and single-agent chat entry points.
+
+Files:
+
+- `static/index.html`
+- `static/js/agents.js`
+
+### Phase 4 — Chat Selector / Session Binding
+
+Implemented:
+
+- Pending chats can carry `crewMemberId` and `groupPresetId`.
+- Sessions persist `crew_member_id` and `group_preset_id`.
+- Session create/patch APIs accept both bindings.
+
+Files:
+
+- `core/database.py`
+- `src/request_models.py`
+- `routes/session_routes.py`
+- `static/js/sessions.js`
+- `tests/test_session_agent_binding.py`
+
+### Phase 5 — Lead-Routed Team Run MVP
+
+Implemented:
+
+- `lead_routed` runner on top of `CrewMember + group_presets`.
+- Team-bound `/api/chat` and `/api/chat_stream` execute lead plan → worker outputs → lead synthesis.
+- Worker outputs are wrapped as untrusted context before lead synthesis.
+- Team run metadata is attached to assistant messages.
+
+Files:
+
+- `src/agent_team_runner.py`
+- `routes/chat_routes.py`
+- `tests/test_agent_team_runner.py`
+
+### Phase 6 — Team Activity UI
+
+Implemented:
+
+- Team Activity panel renders persisted assistant metadata.
+- Streaming team runs emit `team_activity` SSE events.
+- UI shows lead, topology, plan, and worker outputs.
+
+Files:
+
+- `static/js/chat.js`
+- `static/js/chatRenderer.js`
+- `static/style.css`
+
+### Phase 7 — Scheduled Task Team Target
+
+Implemented:
+
+- `ScheduledTask.group_preset_id` persisted and migrated.
+- Task create/update/list supports team target.
+- Task scheduler calls lead-routed team runner when `group_preset_id` is set.
+- Task form exposes a Team target dropdown populated from group presets.
+
+Files:
+
+- `core/database.py`
+- `routes/task_routes.py`
+- `src/task_scheduler.py`
+- `static/js/tasks.js`
+- `tests/test_task_team_automation.py`
+
+## Current Known Gaps
+
+- Only `lead_routed` topology executes; other topology values are validated and stored for future use.
+- Team activity is persisted as assistant message metadata, not a dedicated `AgentRun` table.
+- Agent/team UI is intentionally minimal and modal-based.
+- No approval gates yet for risky tools.
+- Webhook-specific team-run UX is not polished beyond scheduled task target support.
+- No dedicated import/export for agent teams yet.
+
+## Verification Commands
+
+```bash
+python3 -m py_compile core/database.py routes/agent_routes.py routes/preset_routes.py routes/session_routes.py routes/task_routes.py routes/chat_routes.py src/agent_team_runner.py src/task_scheduler.py app.py
+node --check static/js/agents.js
+node --check static/js/sessions.js
+node --check static/js/chat.js
+node --check static/js/chatRenderer.js
+node --check static/js/tasks.js
+/tmp/odysseus-test-venv/bin/python -m pytest tests/test_agent_routes.py tests/test_group_preset_routes.py tests/test_session_agent_binding.py tests/test_agent_team_runner.py tests/test_task_team_automation.py -q
+```

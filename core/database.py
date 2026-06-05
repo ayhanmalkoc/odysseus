@@ -1387,7 +1387,7 @@ def _migrate_add_notifications_enabled():
 
 
 def _migrate_add_crew_member_id():
-    """Add crew_member_id column to sessions and scheduled_tasks tables if missing."""
+    """Add agent/team binding columns to sessions and scheduled_tasks tables if missing."""
     try:
         with engine.connect() as conn:
             cols = [r[1] for r in conn.execute(text("PRAGMA table_info(sessions)"))]
@@ -1395,13 +1395,21 @@ def _migrate_add_crew_member_id():
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
                 logging.getLogger(__name__).info("Added crew_member_id column to sessions")
+            if "group_preset_id" not in cols:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN group_preset_id TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added group_preset_id column to sessions")
             cols2 = [r[1] for r in conn.execute(text("PRAGMA table_info(scheduled_tasks)"))]
             if "crew_member_id" not in cols2:
                 conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
                 logging.getLogger(__name__).info("Added crew_member_id column to scheduled_tasks")
+            if "group_preset_id" not in cols2:
+                conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN group_preset_id TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added group_preset_id column to scheduled_tasks")
     except Exception as e:
-        logging.getLogger(__name__).warning(f"crew_member_id migration: {e}")
+        logging.getLogger(__name__).warning(f"crew/team binding migration: {e}")
 
 def _migrate_add_assistant_columns():
     """Add is_default_assistant + timezone columns to crew_members for the personal-assistant feature."""
