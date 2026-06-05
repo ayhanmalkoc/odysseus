@@ -36141,3 +36141,54 @@ body.theme-frosted .modal {
   0%   { box-shadow: 0 0 0 2px var(--accent, var(--red)); }
   100% { box-shadow: 0 0 0 2px transparent; }
 }
+
+
+.team-activity-box {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent, var(--red)) 8%);
+  overflow: hidden;
+}
+.team-activity-box > summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.team-activity-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+  font-size: 12px;
+}
+.team-activity-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  opacity: .85;
+}
+.team-activity-plan,
+.team-activity-worker {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+}
+.team-activity-plan > summary,
+.team-activity-worker > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.team-activity-worker summary span {
+  opacity: .6;
+  font-weight: 400;
+  margin-left: 6px;
+}
+.team-activity-box pre {
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+}

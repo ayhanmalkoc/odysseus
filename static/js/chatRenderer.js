@@ -1893,6 +1893,25 @@ export function displayMetrics(messageElement, metrics) {
 /**
  * Add a message to the chat history.
  */
+function buildTeamActivityBox(metadata) {
+  if (!metadata || !metadata.team_run) return '';
+  const workers = Array.isArray(metadata.workers) ? metadata.workers : [];
+  const workerHtml = workers.map((worker) => `
+    <details class="team-activity-worker">
+      <summary>${uiModule.esc(worker.name || worker.agent_id || 'Worker')} ${worker.role ? `<span>${uiModule.esc(worker.role)}</span>` : ''}</summary>
+      <pre>${uiModule.esc(worker.output || '')}</pre>
+    </details>`).join('');
+  return `
+    <details class="team-activity-box">
+      <summary>Team activity · ${uiModule.esc(metadata.team_name || metadata.team_id || 'Team')} · ${uiModule.esc(metadata.topology || 'lead_routed')}</summary>
+      <div class="team-activity-body">
+        ${metadata.lead?.name ? `<div class="team-activity-row"><strong>Lead</strong><span>${uiModule.esc(metadata.lead.name)}</span></div>` : ''}
+        ${metadata.plan ? `<details class="team-activity-plan" open><summary>Plan</summary><pre>${uiModule.esc(metadata.plan)}</pre></details>` : ''}
+        ${workerHtml || '<div class="muted">No worker outputs.</div>'}
+      </div>
+    </details>`;
+}
+
 export function addMessage(role, content, modelName, metadata) {
   try {
     hideWelcomeScreen();
@@ -2131,6 +2150,10 @@ export function addMessage(role, content, modelName, metadata) {
     // button on the photo thumbnail. _visionBlocks is intentionally left unused
     // so the parsing-and-strip side-effect on `text` still happens.
     void _visionBlocks;
+
+    if (role === 'assistant' && metadata?.team_run) {
+      b.insertAdjacentHTML('beforeend', buildTeamActivityBox(metadata));
+    }
 
     // Add "Open Visual Report" button for persisted research messages
     if (role === 'assistant' && metadata?.research) {

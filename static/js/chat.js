@@ -2335,6 +2335,10 @@ import createResearchSynapse from './researchSynapse.js';
                 currentToolBubble = null;
                 uiModule.scrollHistory();
 
+              } else if (json.type === 'team_activity') {
+                if (_isBg) continue;
+                appendTeamActivityPanel(json.data || {});
+
               } else if (json.type === 'skill_saved') {
                 if (_isBg) continue;
                 const chatBox = document.getElementById('chat-history');
