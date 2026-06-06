@@ -159,11 +159,11 @@ def setup_preset_routes(preset_manager) -> APIRouter:
     # ── Group presets ──
     @router.get("/api/presets/groups")
     async def get_group_presets():
-        """Get saved agent-team/group presets."""
-        return {"groups": preset_manager.get_group_presets()}
+        raise HTTPException(410, "Legacy group presets were removed. Use /api/agent-teams.")
 
     @router.post("/api/presets/groups")
     async def create_or_replace_group_presets(request: Request, _admin: None = Depends(require_admin)):
+        raise HTTPException(410, "Legacy group presets were removed. Use /api/agent-teams.")
         """Create one group preset, or replace all presets for legacy callers passing {groups: [...]}."""
         data = await request.json()
         try:
@@ -183,13 +183,11 @@ def setup_preset_routes(preset_manager) -> APIRouter:
 
     @router.get("/api/presets/groups/{group_id}")
     async def get_group_preset(group_id: str):
-        for group in preset_manager.get_group_presets():
-            if group.get("id") == group_id:
-                return {"group": group}
-        raise HTTPException(404, "Group preset not found")
+        raise HTTPException(410, "Legacy group presets were removed. Use /api/agent-teams.")
 
     @router.patch("/api/presets/groups/{group_id}")
     async def update_group_preset(group_id: str, req: GroupPresetRequest, _admin: None = Depends(require_admin)):
+        raise HTTPException(410, "Legacy group presets were removed. Use /api/agent-teams.")
         group = _normalize_group(req)
         group["id"] = group_id
         groups = preset_manager.get_group_presets()
@@ -202,6 +200,7 @@ def setup_preset_routes(preset_manager) -> APIRouter:
 
     @router.delete("/api/presets/groups/{group_id}")
     async def delete_group_preset(group_id: str, _admin: None = Depends(require_admin)):
+        raise HTTPException(410, "Legacy group presets were removed. Use /api/agent-teams.")
         groups = preset_manager.get_group_presets()
         next_groups = [group for group in groups if group.get("id") != group_id]
         if len(next_groups) == len(groups):

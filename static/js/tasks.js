@@ -532,7 +532,7 @@ function _categoryFor(task) {
   }
   // LLM tasks → Assistant if linked to a crew member, else Other
   if (task.task_type === 'llm' || !task.task_type) {
-    return task.group_preset_id ? 'Team' : (task.crew_member_id ? 'Assistant' : 'Other');
+    return task.target_type === 'team' ? 'Team' : (task.target_type === 'agent' ? 'Agent' : 'Other');
   }
   return 'Other';
 }
@@ -1321,14 +1321,14 @@ function _showForm(existing, initTaskType, initTriggerType) {
   });
 
 
-  // Populate team target dropdown from group presets.
-  fetch(`${API_BASE}/api/presets/groups`, { credentials: 'same-origin' })
-    .then(r => r.ok ? r.json() : { groups: [] })
+  // Populate team target dropdown from first-class agent teams.
+  fetch(`${API_BASE}/api/agent-teams`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : { teams: [] })
     .then(data => {
       const sel = document.getElementById('task-form-team-target');
       if (!sel) return;
-      const cur = existing?.group_preset_id || '';
-      (data.groups || []).forEach(group => {
+      const cur = existing?.target_type === 'team' ? (existing?.target_id || '') : '';
+      (data.teams || []).forEach(group => {
         const opt = document.createElement('option');
         opt.value = group.id || '';
         opt.textContent = `Team: ${group.name || group.id}`;
@@ -1437,7 +1437,8 @@ function _showForm(existing, initTaskType, initTriggerType) {
     if (nameEl) payload.name = nameEl.value.trim() || undefined;
 
     const teamTarget = document.getElementById('task-form-team-target')?.value || '';
-    payload.group_preset_id = teamTarget;
+    payload.target_type = teamTarget ? 'team' : 'chat';
+    payload.target_id = teamTarget;
 
     // Model / endpoint override. Blank = inherit session default. Otherwise
     // value is `endpoint_url::model_id`.

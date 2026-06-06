@@ -27,7 +27,7 @@ from src.auth_helpers import get_current_user
 from routes.session_routes import _verify_session_owner
 from routes.document_helpers import _owner_session_filter
 from core.database import SessionLocal, get_session_mode, set_session_mode
-from core.database import Session as DBSession, ChatMessage as DBChatMessage
+from core.database import Session as DBSession, ChatMessage as DBChatMessage, CrewMember
 from core.database import Document as DBDocument, ModelEndpoint
 from routes.research_routes import _resolve_research_endpoint
 from routes.model_routes import _visible_models
@@ -251,6 +251,26 @@ def _set_user_time_from_request(request: Request) -> None:
         pass
 
 
+def _apply_agent_target_context(session_id: str, owner: str | None, messages: list[dict[str, Any]], fallback_url: str, fallback_model: str) -> tuple[str, str]:
+    """Apply single-agent target persona/model to chat messages."""
+    db = SessionLocal()
+    try:
+        sess = db.query(DBSession).filter(DBSession.id == session_id).first()
+        if not sess or (sess.target_type or "chat") != "agent" or not sess.target_id:
+            return fallback_url, fallback_model
+        q = db.query(CrewMember).filter(CrewMember.id == sess.target_id, CrewMember.is_active == True)  # noqa: E712
+        if owner is not None:
+            q = q.filter(CrewMember.owner == owner)
+        agent = q.first()
+        if not agent:
+            return fallback_url, fallback_model
+        prompt = agent.personality or f"You are {agent.name}, a focused Odysseus agent."
+        messages.insert(0, {"role": "system", "content": prompt})
+        return agent.endpoint_url or fallback_url, agent.model or fallback_model
+    finally:
+        db.close()
+
+
 def setup_chat_routes(
     session_manager,
     chat_handler,
@@ -336,12 +356,14 @@ def setup_chat_routes(
             except Exception as e:
                 logger.error(f"Research failed: {e}")
 
+        effective_url, effective_model = _apply_agent_target_context(session, ctx.user, ctx.messages, sess.endpoint_url, sess.model)
+
         team_result = await run_lead_routed_team(
             session_id=session,
             user_message=message,
             base_messages=ctx.messages,
-            endpoint_url=sess.endpoint_url,
-            model=sess.model,
+            endpoint_url=effective_url,
+            model=effective_model,
             headers=sess.headers,
             temperature=ctx.preset.temperature,
             max_tokens=ctx.preset.max_tokens,
@@ -353,15 +375,15 @@ def setup_chat_routes(
             response_metadata = {"model": sess.model, **team_result.metadata}
         else:
             reply = await llm_call_async(
-                sess.endpoint_url,
-                sess.model,
+                effective_url,
+                effective_model,
                 ctx.messages,
                 headers=sess.headers,
                 temperature=ctx.preset.temperature,
                 max_tokens=ctx.preset.max_tokens,
                 prompt_type=preset_id,
             )
-            response_metadata = {"model": sess.model}
+            response_metadata = {"model": effective_model}
         _clean_reply, _clean_md = clean_thinking_for_save(reply, response_metadata)
         sess.add_message(ChatMessage("assistant", _clean_reply, metadata=_clean_md))
 
@@ -677,12 +699,14 @@ def setup_chat_routes(
             if chat_mode == 'chat':
                 disabled_tools.update({"bash", "python", "read_file", "write_file", "web_search", "web_fetch", "search_chats", "manage_tasks"})
 
+        effective_url, effective_model = _apply_agent_target_context(session, ctx.user, ctx.messages, sess.endpoint_url, sess.model)
+
         team_result = await run_lead_routed_team(
             session_id=session,
             user_message=message,
             base_messages=ctx.messages,
-            endpoint_url=sess.endpoint_url,
-            model=sess.model,
+            endpoint_url=effective_url,
+            model=effective_model,
             headers=sess.headers,
             temperature=ctx.preset.temperature,
             max_tokens=ctx.preset.max_tokens,
@@ -879,7 +903,7 @@ def setup_chat_routes(
 
             # Send model name early so the frontend can show it during streaming
             _model_suffix = "Research" if do_research else None
-            _model_info = {"type": "model_info", "model": sess.model}
+            _model_info = {"type": "model_info", "model": effective_model}
             if _model_suffix:
                 _model_info["suffix"] = _model_suffix
             if ctx.preset.character_name:
@@ -924,7 +948,7 @@ def setup_chat_routes(
                 _answered_by = None  # set if the selected model failed and a fallback answered
                 # ── Chat mode: call stream_llm directly, NO tools, NO document access ──
                 try:
-                    _chat_candidates = [(sess.endpoint_url, sess.model, sess.headers)] + _fallback_candidates
+                    _chat_candidates = [(effective_url, effective_model, sess.headers)] + _fallback_candidates
                     async for chunk in stream_llm_with_fallback(
                         _chat_candidates,
                         messages,

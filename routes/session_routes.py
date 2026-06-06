@@ -324,8 +324,8 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
         skip_validation: str = Form(None),
         api_key: str = Form(""),
         endpoint_id: str = Form(""),
-        crew_member_id: str = Form(""),
-        group_preset_id: str = Form(""),
+        target_type: str = Form("chat"),
+        target_id: str = Form(""),
     ):
         skip_val = str(skip_validation).lower() == "true"
         user = get_current_user(request)
@@ -412,18 +412,23 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
             rag=str(rag).lower() == "true" if rag else False,
             owner=user,
         )
-        # Persist optional agent/team binding for single-agent and team chats.
-        if crew_member_id or group_preset_id:
-            db = SessionLocal()
-            try:
-                db_session = db.query(DbSession).filter(DbSession.id == sid).first()
-                if db_session:
-                    db_session.crew_member_id = crew_member_id.strip() or None
-                    db_session.group_preset_id = group_preset_id.strip() or None
-                    db_session.mode = "team" if group_preset_id.strip() else "agent"
-                    db.commit()
-            finally:
-                db.close()
+        # Persist clean chat target binding.
+        clean_target_type = (target_type or "chat").strip().lower()
+        clean_target_id = (target_id or "").strip()
+        if clean_target_type not in ("chat", "agent", "team"):
+            raise HTTPException(400, "target_type must be chat, agent, or team")
+        if clean_target_type in ("agent", "team") and not clean_target_id:
+            raise HTTPException(400, "target_id is required for agent/team sessions")
+        db = SessionLocal()
+        try:
+            db_session = db.query(DbSession).filter(DbSession.id == sid).first()
+            if db_session:
+                db_session.target_type = clean_target_type
+                db_session.target_id = clean_target_id or None
+                db_session.mode = clean_target_type
+                db.commit()
+        finally:
+            db.close()
         # Set auth headers for custom API-key endpoints
         resolved_key = request_api_key
         resolved_base = endpoint_url
@@ -448,8 +453,8 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
             model=model_to_use,
             rag=str(rag).lower() == "true" if rag else False,
             archived=False,
-            crew_member_id=crew_member_id.strip() or None,
-            group_preset_id=group_preset_id.strip() or None,
+            target_type=clean_target_type,
+            target_id=clean_target_id or None,
         )    
     @router.patch("/session/{sid}")
     def rename_session(
@@ -457,8 +462,8 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
         name: str = Form(None), folder: str = Form(None),
         model: str = Form(None), endpoint_url: str = Form(None),
         endpoint_id: str = Form(None),
-        crew_member_id: str = Form(None),
-        group_preset_id: str = Form(None),
+        target_type: str = Form(None),
+        target_id: str = Form(None),
     ):
         _verify_session_owner(request, sid)
         try:
@@ -481,20 +486,24 @@ def setup_session_routes(session_manager: SessionManager, config: dict, webhook_
                     result["folder"] = folder if folder else None
             finally:
                 db.close()
-        if crew_member_id is not None or group_preset_id is not None:
+        if target_type is not None or target_id is not None:
             db = SessionLocal()
             try:
                 db_session = db.query(DbSession).filter(DbSession.id == sid).first()
                 if db_session:
-                    if crew_member_id is not None:
-                        db_session.crew_member_id = crew_member_id.strip() or None
-                        result["crew_member_id"] = db_session.crew_member_id
-                    if group_preset_id is not None:
-                        db_session.group_preset_id = group_preset_id.strip() or None
-                        result["group_preset_id"] = db_session.group_preset_id
-                    db_session.mode = "team" if db_session.group_preset_id else ("agent" if db_session.crew_member_id else db_session.mode)
+                    clean_target_type = (target_type if target_type is not None else db_session.target_type or "chat").strip().lower()
+                    clean_target_id = (target_id if target_id is not None else db_session.target_id or "").strip()
+                    if clean_target_type not in ("chat", "agent", "team"):
+                        raise HTTPException(400, "target_type must be chat, agent, or team")
+                    if clean_target_type in ("agent", "team") and not clean_target_id:
+                        raise HTTPException(400, "target_id is required for agent/team sessions")
+                    db_session.target_type = clean_target_type
+                    db_session.target_id = clean_target_id or None
+                    db_session.mode = clean_target_type
                     db_session.updated_at = datetime.utcnow()
                     db.commit()
+                    result["target_type"] = db_session.target_type
+                    result["target_id"] = db_session.target_id
             finally:
                 db.close()
         # Switch model/endpoint mid-session

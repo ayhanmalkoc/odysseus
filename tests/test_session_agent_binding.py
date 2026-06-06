@@ -48,23 +48,23 @@ def _client(tmp_path, monkeypatch):
     return TestClient(app), TestingSession
 
 
-def test_create_session_persists_agent_and_team_binding(tmp_path, monkeypatch):
+def test_create_session_persists_target_binding(tmp_path, monkeypatch):
     client, TestingSession = _client(tmp_path, monkeypatch)
     response = client.post("/api/session", data={
         "name": "Team chat",
         "endpoint_url": "http://example.test/v1/chat/completions",
         "model": "test-model",
         "skip_validation": "true",
-        "crew_member_id": "crew-1",
-        "group_preset_id": "team-1",
+        "target_type": "team",
+        "target_id": "team-1",
     })
     assert response.status_code == 200
     sid = response.json()["id"]
     db = TestingSession()
     try:
         row = db.query(DbSession).filter(DbSession.id == sid).first()
-        assert row.crew_member_id == "crew-1"
-        assert row.group_preset_id == "team-1"
+        assert row.target_type == "team"
+        assert row.target_id == "team-1"
         assert row.mode == "team"
     finally:
         db.close()

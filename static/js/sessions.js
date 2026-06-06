@@ -1573,7 +1573,7 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 
     const currentMetaEl = uiModule.el('current-meta');
     if (currentMetaEl) {
-      const suffix = meta?.group_preset_id ? ' · Team' : (meta?.crew_member_id ? ' · Agent' : '');
+      const suffix = meta?.target_type === 'team' ? ' · Team' : (meta?.target_type === 'agent' ? ' · Agent' : '');
       currentMetaEl.textContent = (meta ? meta.name : 'Odysseus Chat') + suffix;
     }
     // Update model picker visibility
@@ -1760,7 +1760,7 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
 }
 
 // Pending session — stored locally until the first message is sent
-let _pendingChat = null; // { url, modelId, endpointId, crewMemberId, groupPresetId, crewMemberName, groupPresetName }
+let _pendingChat = null; // { url, modelId, endpointId, targetType, targetId, targetName }
 
 export function createDirectChat(url, modelId, endpointId) {
   _sessionNavToken++;
@@ -1811,9 +1811,9 @@ export function createDirectChat(url, modelId, endpointId) {
   // Update current-meta header
   const metaEl = document.getElementById('current-meta');
   if (metaEl) {
-    const suffix = _pendingChat?.groupPresetId
-      ? ` · Team: ${_pendingChat.groupPresetName || _pendingChat.groupPresetId}`
-      : (_pendingChat?.crewMemberId ? ` · Agent: ${_pendingChat.crewMemberName || _pendingChat.crewMemberId}` : '');
+    const suffix = _pendingChat?.targetType === 'team'
+      ? ` · Team: ${_pendingChat.targetName || _pendingChat.targetId}`
+      : (_pendingChat?.targetType === 'agent' ? ` · Agent: ${_pendingChat.targetName || _pendingChat.targetId}` : '');
     metaEl.textContent = 'New Chat' + suffix;
   }
 
@@ -1843,11 +1843,9 @@ export async function materializePendingSession() {
   if (pending.endpointId) {
     fd.append('endpoint_id', pending.endpointId);
   }
-  if (pending.crewMemberId) {
-    fd.append('crew_member_id', pending.crewMemberId);
-  }
-  if (pending.groupPresetId) {
-    fd.append('group_preset_id', pending.groupPresetId);
+  fd.append('target_type', pending.targetType || 'chat');
+  if (pending.targetId) {
+    fd.append('target_id', pending.targetId);
   }
 
   let res;
@@ -1918,10 +1916,9 @@ export function getCurrentEndpointUrl() {
 
 export function setNextChatBinding(binding = {}) {
   window.__nextChatBinding = {
-    crewMemberId: binding.crewMemberId || '',
-    groupPresetId: binding.groupPresetId || '',
-    crewMemberName: binding.crewMemberName || '',
-    groupPresetName: binding.groupPresetName || '',
+    targetType: binding.targetType || 'chat',
+    targetId: binding.targetId || '',
+    targetName: binding.targetName || '',
   };
   if (_pendingChat) {
     _pendingChat = { ..._pendingChat, ...window.__nextChatBinding };

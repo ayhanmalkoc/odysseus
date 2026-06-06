@@ -125,6 +125,8 @@ class SessionResponse(BaseModel):
     model: str = Field(..., description="Model being used")
     rag: bool = Field(default=False, description="RAG enabled")
     archived: bool = Field(default=False, description="Whether session is archived")
+    target_type: Optional[str] = Field(default="chat", description="chat, agent, or team")
+    target_id: Optional[str] = Field(default=None, description="Target agent/team id")
 
 
 class MemoryResponse(BaseModel):

@@ -573,6 +573,14 @@ app.include_router(setup_preset_routes(preset_manager))
 # Agents (CrewMember-backed agent profiles)
 from routes.agent_routes import setup_agent_routes
 app.include_router(setup_agent_routes())
+from routes.agent_persona_routes import setup_agent_persona_routes
+app.include_router(setup_agent_persona_routes())
+from routes.agent_role_routes import setup_agent_role_routes
+app.include_router(setup_agent_role_routes())
+from routes.agent_team_routes import setup_agent_team_routes
+app.include_router(setup_agent_team_routes())
+from routes.agent_run_routes import setup_agent_run_routes
+app.include_router(setup_agent_run_routes())
 
 # Diagnostics
 from routes.diagnostics_routes import setup_diagnostics_routes

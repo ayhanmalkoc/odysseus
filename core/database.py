@@ -126,9 +126,11 @@ class Session(TimestampMixin, Base):
     message_count = Column(Integer, default=0)
     total_input_tokens = Column(Integer, default=0)
     total_output_tokens = Column(Integer, default=0)
-    mode = Column(String, nullable=True)  # 'agent', 'chat', or 'research'
-    crew_member_id = Column(String, nullable=True)  # links to crew_members.id
-    group_preset_id = Column(String, nullable=True)  # links to preset_manager group_presets id
+    mode = Column(String, nullable=True)  # chat, agent, team, or research
+    target_type = Column(String, nullable=True)  # chat, agent, team
+    target_id = Column(String, nullable=True)
+    crew_member_id = Column(String, nullable=True)  # deprecated: use target_type/target_id
+    group_preset_id = Column(String, nullable=True)  # deprecated: use target_type/target_id
 
     # Relationship to chat messages
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
@@ -156,8 +158,8 @@ class Session(TimestampMixin, Base):
             'folder': self.folder,
             'total_input_tokens': self.total_input_tokens or 0,
             'total_output_tokens': self.total_output_tokens or 0,
-            'crew_member_id': self.crew_member_id,
-            'group_preset_id': self.group_preset_id,
+            'target_type': self.target_type or ('team' if self.group_preset_id else ('agent' if self.crew_member_id else 'chat')),
+            'target_id': self.target_id or self.group_preset_id or self.crew_member_id,
         }
 
 class ChatMessage(Base):
@@ -523,6 +525,101 @@ class CrewMember(TimestampMixin, Base):
                            backref=backref("crew_member", uselist=False))
 
 
+class AgentPersona(TimestampMixin, Base):
+    """Reusable persona/system-prompt template used by agents."""
+    __tablename__ = "agent_personas"
+
+    id = Column(String, primary_key=True, index=True)
+    owner = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    system_prompt = Column(Text, nullable=True)
+    prompt_prefix = Column(Text, nullable=True)
+    prompt_suffix = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+
+class AgentRole(TimestampMixin, Base):
+    """Reusable role label for team membership."""
+    __tablename__ = "agent_roles"
+
+    id = Column(String, primary_key=True, index=True)
+    owner = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    is_builtin = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+
+
+class AgentTeam(TimestampMixin, Base):
+    """Team of agents coordinated by a leader agent."""
+    __tablename__ = "agent_teams"
+
+    id = Column(String, primary_key=True, index=True)
+    owner = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    leader_agent_id = Column(String, ForeignKey("crew_members.id"), nullable=False, index=True)
+    topology = Column(String, default="lead_routed")
+    shared_instructions = Column(Text, nullable=True)
+    run_policy = Column(JSON, default=dict)
+    status = Column(String, default="active")
+    is_active = Column(Boolean, default=True)
+
+    leader = relationship("CrewMember", foreign_keys=[leader_agent_id])
+    members = relationship("AgentTeamMember", back_populates="team", cascade="all, delete-orphan", order_by="AgentTeamMember.sort_order")
+
+
+class AgentTeamMember(TimestampMixin, Base):
+    """Agent membership in a team with a role and execution order."""
+    __tablename__ = "agent_team_members"
+
+    id = Column(String, primary_key=True, index=True)
+    team_id = Column(String, ForeignKey("agent_teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_id = Column(String, ForeignKey("crew_members.id"), nullable=False, index=True)
+    role = Column(String, default="worker")
+    sort_order = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+
+    team = relationship("AgentTeam", back_populates="members")
+    agent = relationship("CrewMember", foreign_keys=[agent_id])
+
+
+class AgentRun(TimestampMixin, Base):
+    """Persistent execution record for an agent or team chat turn."""
+    __tablename__ = "agent_runs"
+
+    id = Column(String, primary_key=True, index=True)
+    owner = Column(String, nullable=True, index=True)
+    session_id = Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_type = Column(String, nullable=False)
+    target_id = Column(String, nullable=True, index=True)
+    status = Column(String, default="running")
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    meta_data = Column("metadata", Text, nullable=True)
+
+    steps = relationship("AgentRunStep", back_populates="run", cascade="all, delete-orphan", order_by="AgentRunStep.sort_order")
+
+
+class AgentRunStep(TimestampMixin, Base):
+    """Timeline step for an agent/team run."""
+    __tablename__ = "agent_run_steps"
+
+    id = Column(String, primary_key=True, index=True)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    sort_order = Column(Integer, default=0)
+    step_type = Column(String, nullable=False)
+    agent_id = Column(String, nullable=True, index=True)
+    role = Column(String, nullable=True)
+    title = Column(String, nullable=True)
+    content = Column(Text, nullable=True)
+    status = Column(String, default="completed")
+    meta_data = Column("metadata", Text, nullable=True)
+
+    run = relationship("AgentRun", back_populates="steps")
+
+
 class ScheduledTask(TimestampMixin, Base):
     """A recurring or one-off task — LLM-powered or direct action, time or event triggered."""
     __tablename__ = "scheduled_tasks"
@@ -553,8 +650,10 @@ class ScheduledTask(TimestampMixin, Base):
     cron_expression = Column(String, nullable=True)           # cron string e.g. "*/5 * * * *"
     then_task_id   = Column(String, ForeignKey("scheduled_tasks.id", ondelete="SET NULL"), nullable=True)
     webhook_token  = Column(String, nullable=True, unique=True)
-    crew_member_id = Column(String, nullable=True)     # optional link to crew_members.id
-    group_preset_id = Column(String, nullable=True)    # optional link to preset_manager group_presets id
+    target_type = Column(String, nullable=True)       # chat, agent, team
+    target_id = Column(String, nullable=True)
+    crew_member_id = Column(String, nullable=True)     # deprecated
+    group_preset_id = Column(String, nullable=True)    # deprecated
     # character_id historically referenced an agent_characters table that was
     # never actually created. Keep the column for schema compatibility but
     # drop the ForeignKey so SQLAlchemy table sort doesn't fail on flush.
@@ -1391,6 +1490,14 @@ def _migrate_add_crew_member_id():
     try:
         with engine.connect() as conn:
             cols = [r[1] for r in conn.execute(text("PRAGMA table_info(sessions)"))]
+            if "target_type" not in cols:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN target_type TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added target_type column to sessions")
+            if "target_id" not in cols:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN target_id TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added target_id column to sessions")
             if "crew_member_id" not in cols:
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
@@ -1400,6 +1507,14 @@ def _migrate_add_crew_member_id():
                 conn.commit()
                 logging.getLogger(__name__).info("Added group_preset_id column to sessions")
             cols2 = [r[1] for r in conn.execute(text("PRAGMA table_info(scheduled_tasks)"))]
+            if "target_type" not in cols2:
+                conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN target_type TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added target_type column to scheduled_tasks")
+            if "target_id" not in cols2:
+                conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN target_id TEXT"))
+                conn.commit()
+                logging.getLogger(__name__).info("Added target_id column to scheduled_tasks")
             if "crew_member_id" not in cols2:
                 conn.execute(text("ALTER TABLE scheduled_tasks ADD COLUMN crew_member_id TEXT"))
                 conn.commit()
@@ -1519,6 +1634,28 @@ class Integration(TimestampMixin, Base):
 
 
 
+def _seed_agent_roles():
+    """Seed built-in agent team roles."""
+    try:
+        defaults = [
+            ("role-leader", "leader", "Plans work, delegates tasks, and synthesizes final answers."),
+            ("role-worker", "worker", "Executes delegated work."),
+            ("role-researcher", "researcher", "Finds and verifies information."),
+            ("role-coder", "coder", "Implements code changes."),
+            ("role-reviewer", "reviewer", "Reviews output and catches defects."),
+            ("role-critic", "critic", "Challenges assumptions and failure modes."),
+        ]
+        with SessionLocal() as db:
+            for role_id, name, description in defaults:
+                existing = db.query(AgentRole).filter(AgentRole.id == role_id).first()
+                if existing:
+                    continue
+                db.add(AgentRole(id=role_id, owner=None, name=name, description=description, is_builtin=True, is_active=True))
+            db.commit()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"agent role seed failed: {e}")
+
+
 def _migrate_seed_email_account():
     """If email_accounts is empty and settings.json has legacy flat imap_host/smtp_host
     keys, create a single default account from them so nothing breaks for users who
@@ -1628,6 +1765,7 @@ def init_db():
     _migrate_drop_ping_notes_tasks()
     _migrate_add_crew_member_id()
     _migrate_add_assistant_columns()
+    _seed_agent_roles()
     _migrate_add_email_smtp_security()
     _migrate_seed_email_account()
     _migrate_add_calendar_metadata()

@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from core.database import Base, CrewMember, Session as DbSession
+from core.database import Base, CrewMember, Session as DbSession, AgentTeam, AgentTeamMember, AgentRun, AgentRunStep
 from src import agent_team_runner
 
 
@@ -35,9 +35,13 @@ def test_lead_routed_team_run_uses_lead_worker_and_metadata(tmp_path, monkeypatc
 
     db = TestingSession()
     try:
-        db.add(DbSession(id="s1", name="Team", endpoint_url="base-url", model="base-model", owner="", group_preset_id="team-1"))
+        db.add(DbSession(id="s1", name="Team", endpoint_url="base-url", model="base-model", owner="", target_type="team", target_id="team-1"))
         db.add(CrewMember(id="lead", owner="", name="Lead", personality="Coordinate.", model="lead-model", endpoint_url="lead-url", is_active=True))
         db.add(CrewMember(id="worker", owner="", name="Worker", personality="Research.", model="worker-model", endpoint_url="worker-url", is_active=True))
+        db.flush()
+        db.add(AgentTeam(id="team-1", owner="", name="Research Team", leader_agent_id="lead", topology="lead_routed", shared_instructions="Be crisp.", run_policy={"max_steps": 4}, is_active=True))
+        db.flush()
+        db.add(AgentTeamMember(id="member-1", team_id="team-1", agent_id="worker", role="researcher", sort_order=1, enabled=True))
         db.commit()
     finally:
         db.close()
@@ -55,7 +59,7 @@ def test_lead_routed_team_run_uses_lead_worker_and_metadata(tmp_path, monkeypatc
             temperature=0.2,
             max_tokens=500,
             owner="",
-            preset_manager=Presets(),
+            preset_manager=None,
             llm_call=fake_llm,
         )
 
@@ -65,3 +69,11 @@ def test_lead_routed_team_run_uses_lead_worker_and_metadata(tmp_path, monkeypatc
     assert result.metadata["lead"]["name"] == "Lead"
     assert result.metadata["workers"][0]["name"] == "Worker"
     assert result.metadata["plan"] == "Plan: worker researches facts."
+    db = TestingSession()
+    try:
+        run = db.query(AgentRun).first()
+        assert run is not None
+        assert run.status == "completed"
+        assert db.query(AgentRunStep).filter(AgentRunStep.run_id == run.id).count() == 3
+    finally:
+        db.close()

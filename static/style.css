@@ -36256,3 +36256,30 @@ body.theme-frosted .modal {
 @media (max-width: 760px) {
   .agent-team-launcher, .agent-team-grid { grid-template-columns: 1fr; }
 }
+.agent-team-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+  flex-wrap: wrap;
+}
+.agent-team-tabs .active {
+  border-color: var(--red);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+.agent-product-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg) 8%);
+}
+.agent-editor-grid {
+  display: grid;
+  gap: 10px;
+  max-width: 820px;
+}
+.agent-editor-grid input,
+.agent-editor-grid select,
+.agent-editor-grid textarea {
+  width: 100%;
+}

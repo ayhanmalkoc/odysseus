@@ -48,20 +48,24 @@ def test_task_api_persists_group_preset_id(tmp_path, monkeypatch):
         "task_type": "llm",
         "schedule": "once",
         "scheduled_date": "2099-01-01T00:00:00Z",
-        "group_preset_id": "team-1",
+        "target_type": "team",
+            "target_id": "team-1",
     })
     assert created.status_code == 200
-    assert created.json()["group_preset_id"] == "team-1"
+    assert created.json()["target_type"] == "team"
+    assert created.json()["target_id"] == "team-1"
     task_id = created.json()["id"]
 
-    updated = client.put(f"/api/tasks/{task_id}", json={"group_preset_id": "team-2"})
+    updated = client.put(f"/api/tasks/{task_id}", json={"target_type": "team", "target_id": "team-2"})
     assert updated.status_code == 200
-    assert updated.json()["group_preset_id"] == "team-2"
+    assert updated.json()["target_type"] == "team"
+    assert updated.json()["target_id"] == "team-2"
 
     db = TestingSession()
     try:
         row = db.query(ScheduledTask).filter(ScheduledTask.id == task_id).first()
-        assert row.group_preset_id == "team-2"
+        assert row.target_type == "team"
+        assert row.target_id == "team-2"
     finally:
         db.close()
 
