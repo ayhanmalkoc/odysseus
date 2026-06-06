@@ -645,7 +645,7 @@ body.bg-pattern-sparkles {
       flex-shrink: 0;
       background: var(--panel);
       border-right: 1px solid var(--border);
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       padding: 48px 4px 8px 4px;
@@ -656,6 +656,12 @@ body.bg-pattern-sparkles {
       /* Allow hover labels (e.g. the rail-new-chat "New" tooltip) to extend
          outside the 48px column. overflow:hidden was clipping them. */
       overflow: visible;
+    }
+    body.sidebar-collapsed .icon-rail {
+      display: flex;
+    }
+    body:not(.sidebar-collapsed) .icon-rail:not(.mobile-mini) {
+      display: none !important;
     }
     .rail-resize-handle {
       position: absolute;
